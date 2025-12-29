@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "es2022",
+        "module": "es2022",
+        "rewriteRelativeImportExtensions": true
+    },
+    "files": [
+        "basic_shapes.ts",
+        "commandline.ts",
+        "constraints.ts",
+        "containers.ts",
+        "fill.ts",
+        "tsfig.ts",
+        "figure.ts",
+        "path.ts",
+        "shapes.ts",
+        "svg.ts",
+        "test.ts",
+        "util.ts",
+        "../lib.deno.d.ts"
+    ]
+}

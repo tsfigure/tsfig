@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "paths": {
+            "figure": [
+                "./../figure.js"
+            ]
+        },
+        "target": "es2022"
+    },
+    "include": [
+        "./*.ts"
+    ]
+}

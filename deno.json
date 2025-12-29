@@ -1,0 +1,5 @@
+{
+    "imports": {
+        "figure": "./figure.ts"
+    }
+}
