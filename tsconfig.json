@@ -16,7 +16,6 @@
         "shapes.ts",
         "svg.ts",
         "test.ts",
-        "util.ts",
-        "../lib.deno.d.ts"
+        "util.ts"
     ]
 }

@@ -1,5 +1,9 @@
 # tsfigure
 
+<p align="center">
+    Try it on the <a href="https://tsfigure.github.io/playground.html"><b>Playground</b></a>
+</p>
+
 **tsfigure** is a tool to create figures using Typescript. It can draw charts, diagrams, fractals and anything else you can describe with code.
 
 The tsfigure language is designed to be powerful but readable. Being Typescript-based, it enjoys all the existing Typescript tooling: mature editors, smart autocompletion and efficient runtimes.

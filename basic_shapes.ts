@@ -378,20 +378,20 @@ export class Rect extends Shape implements Movable, Inflatable {
         }
 
         if (this.properties.has("top_left")) {
-            x_sys.add("top_left", 1, 0, this.properties.get("top_left").left)
-            y_sys.add("top_left", 1, 0, this.properties.get("top_left").top)
+            x_sys.add("top_left", 1, 0, this.properties.get("top_left").x)
+            y_sys.add("top_left", 1, 0, this.properties.get("top_left").y)
         }
         if (this.properties.has("top_right")) {
-            x_sys.add("top_right", 0, 1, this.properties.get("top_right").right)
-            y_sys.add("top_right", 1, 0, this.properties.get("top_right").top)
+            x_sys.add("top_right", 0, 1, this.properties.get("top_right").x)
+            y_sys.add("top_right", 1, 0, this.properties.get("top_right").y)
         }
         if (this.properties.has("bottom_left")) {
-            x_sys.add("bottom_left", 1, 0, this.properties.get("bottom_left").left)
-            y_sys.add("bottom_left", 0, 1, this.properties.get("bottom_left").bottom)
+            x_sys.add("bottom_left", 1, 0, this.properties.get("bottom_left").x)
+            y_sys.add("bottom_left", 0, 1, this.properties.get("bottom_left").y)
         }
         if (this.properties.has("bottom_right")) {
-            x_sys.add("bottom_right", 0, 1, this.properties.get("bottom_right").right)
-            y_sys.add("bottom_right", 0, 1, this.properties.get("bottom_right").bottom)
+            x_sys.add("bottom_right", 0, 1, this.properties.get("bottom_right").x)
+            y_sys.add("bottom_right", 0, 1, this.properties.get("bottom_right").y)
         }
 
         // By default, center at (0,0)
