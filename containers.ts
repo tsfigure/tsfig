@@ -63,10 +63,10 @@ export class UnionBase extends Shape implements Movable {
         return named_children.get(name)
     }
 
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move_to = _default_move_to
+    scale = _default_scale<UnionBase>
+    rotate = _default_rotate<UnionBase>
+    transform_2to2 = _default_transform_2to2<UnionBase>
+    move_to = _default_move_to<UnionBase>
     clip = _default_clip
 }
 
@@ -78,13 +78,7 @@ export class Union extends UnionBase implements Movable {
             this.properties.set("children", [])
         }
         for (const shape of shapes) {
-            if (shape instanceof Union) {
-                for (const child of shape.children()) {
-                    this.properties.get("children").push(child)
-                }
-            } else {
-                this.properties.get("children").push(shape)
-            }
+            this.properties.get("children").push(shape)
         }
         return this
     }
@@ -120,11 +114,11 @@ export class Figure extends Union implements Movable {
         return result
     }
 
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    scale = _default_scale<Figure>
+    rotate = _default_rotate<Figure>
+    transform_2to2 = _default_transform_2to2<Figure>
+    move = _default_move<Figure>
+    move_to = _default_move_to<Figure>
     clip = _default_clip
 }
 
@@ -202,9 +196,12 @@ export class Linear extends UnionBase implements Movable {
                 along_sys.add("center", 0.5, 0.5, this.properties.get("center").y)
             }
         }
-        if (this.properties.has("gap")) {
-            along_sys.add("gap", -1, 1, children_total_along + (num_children - 1) * this.properties.get("gap"))
+        if (!this.properties.has("gap")) {
+            this.properties.set("gap", 0)
         }
+        along_sys.add("gap", -1, 1, children_total_along + (num_children - 1) * this.properties.get("gap"))
+        // By default, the center is (0,0)
+        along_sys.add_if_underconstrained(1, 1, 0)
 
         const [along_min, along_max] = along_sys.solve()
 
@@ -236,6 +233,8 @@ export class Linear extends UnionBase implements Movable {
                 perp_sys.add("center", 0.5, 0.5, this.properties.get("center").x)
             }
         }
+        // By default, the center is (0,0)
+        perp_sys.add_if_underconstrained(1, 1, 0)
 
         const [perp_min, perp_max] = perp_sys.solve()
         const perp_center = (perp_min + perp_max) / 2
@@ -259,7 +258,7 @@ export class Linear extends UnionBase implements Movable {
         // Compute spacing
         let spacing
         if (num_children == 1) {
-            spacing = undefined
+            spacing = vec(0, 0)
         } else {
             spacing = (along_max - along_min - children_total_along) / (num_children - 1)
             if (direction == "right") {
@@ -303,6 +302,11 @@ export class Linear extends UnionBase implements Movable {
         this.properties.set("children", transformed_children)
 
         super.compute_bbox()
+        const bbox = this.properties.get("bbox")
+        this.properties.set("left", bbox.left)
+        this.properties.set("top", bbox.top)
+        this.properties.set("right", bbox.right)
+        this.properties.set("bottom", bbox.bottom)
     }
 
     add(...shapes: Shape[])

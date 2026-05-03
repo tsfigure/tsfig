@@ -117,12 +117,12 @@ export class MiteredPath extends Shape implements Movable {
         return <any>result
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    transform = _default_transform<MiteredPath>
+    scale = _default_scale<MiteredPath>
+    rotate = _default_rotate<MiteredPath>
+    transform_2to2 = _default_transform_2to2<MiteredPath>
+    move = _default_move<MiteredPath>
+    move_to = _default_move_to<MiteredPath>
     clip = _default_clip
 }
 
@@ -168,11 +168,11 @@ export class InflatedPath extends Shape implements Movable {
         return result
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move_to = _default_move_to
+    transform = _default_transform<InflatedPath>
+    scale = _default_scale<InflatedPath>
+    rotate = _default_rotate<InflatedPath>
+    transform_2to2 = _default_transform_2to2<InflatedPath>
+    move_to = _default_move_to<InflatedPath>
     clip = _default_clip
 }
 
@@ -192,9 +192,9 @@ export class Path extends Shape implements Movable {
 
     start(x: number | Vec, y?: number) {
         assert(this.commands.length == 0)
-        if (x instanceof Vec) {
+        if (x instanceof Vec && arguments.length == 1) {
             this.start_pos = x
-        } else if (typeof y !== 'undefined') {
+        } else if (arguments.length == 2) {
             this.start_pos = vec(x, y)
         } else {
             throw new Error("Incorrect parameters for Path.start()")
@@ -288,13 +288,13 @@ export class Path extends Shape implements Movable {
         return InflatedPath.from_core_properties(this.start_pos, this.commands, amount)
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
+    transform = _default_transform<Path>
+    scale = _default_scale<Path>
+    rotate = _default_rotate<Path>
+    transform_2to2 = _default_transform_2to2<Path>
+    move = _default_move<Path>
+    move_to = _default_move_to<Path>
     clip = _default_clip
-    move = _default_move
-    move_to = _default_move_to
 }
 
 export function path() {

@@ -18,8 +18,7 @@ export class Vec {
     x: number
     y: number
     constructor(x, y?) {
-        if (typeof y === 'undefined') {
-            // Single-argument case
+        if (arguments.length == 1) {
             if (x instanceof Vec) {
                 this.x = x.x
                 this.y = x.y
@@ -37,7 +36,7 @@ export class Vec {
         if (other instanceof Vec) {
             return new Vec(this.x + other.x, this.y + other.y)
         }
-        if (typeof y === "undefined") {
+        if (arguments.length == 1) {
             throw new Error("Missing y value")
         }
         return new Vec(this.x + other, this.y + y)
@@ -47,7 +46,7 @@ export class Vec {
         if (other instanceof Vec) {
             return new Vec(this.x - other.x, this.y - other.y)
         }
-        if (typeof y === "undefined") {
+        if (arguments.length == 1) {
             throw new Error("Missing y value")
         }
         return new Vec(this.x - other, this.y - y)
@@ -91,6 +90,9 @@ export function angle(from: Vec, to: Vec) {
 }
 
 export function vec(x: number | Vec, y?: number) {
+    if (arguments.length == 1) {
+        return new Vec(x)
+    }
     return new Vec(x, y)
 }
 
@@ -255,7 +257,7 @@ class RangeIterable {
 class Range extends RangeIterable {
     end: number
     constructor(start, end?) {
-        if (typeof end === 'undefined') {
+        if (arguments.length == 1) {
             super(0, Math.floor(start), 1)
             this.end = start
         } else {
@@ -265,10 +267,10 @@ class Range extends RangeIterable {
     }
 
     spread(num_points, include_first?: boolean, include_last?: boolean) {
-        if (typeof include_first === 'undefined') {
+        if (arguments.length == 1) {
             include_first = true
         }
-        if (typeof include_last === 'undefined') {
+        if (arguments.length < 3) {
             include_last = true
         }
         let spacing
@@ -297,5 +299,8 @@ class Range extends RangeIterable {
 }
 
 export function range(start: number, end?: number) {
+    if (arguments.length == 1) {
+        return new Range(start)
+    }
     return new Range(start, end)
 }

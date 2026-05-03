@@ -61,8 +61,8 @@ export function collector<T extends Shape>(obj: T, property: string, element_mak
     return add_element
 }
 
-export function _default_transform(matrix: number[]): Shape & Movable {
-    return new LinearTransform(this, matrix)
+export function _default_transform<T extends Shape>(this: T, matrix: number[]): LinearTransformOf<T> {
+    return <any>new LinearTransform(this, matrix)
 }
 
 export function _default_rotate<T extends { transform: any }>(this: T, degrees: number):
@@ -170,6 +170,10 @@ export class Shape {
         this.finalized = true
     }
 
+    is_axis_aligned_box(): boolean {
+        return false
+    }
+
     compute_properties() { }
 
     fill(fill): this {
@@ -237,12 +241,16 @@ export class RectBorder extends Shape implements Movable {
         return <any>result
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    is_axis_aligned_box() {
+        return true
+    }
+
+    transform = _default_transform<RectBorder>
+    scale = _default_scale<RectBorder>
+    rotate = _default_rotate<RectBorder>
+    transform_2to2 = _default_transform_2to2<RectBorder>
+    move = _default_move<RectBorder>
+    move_to = _default_move_to<RectBorder>
     clip = _default_clip
 }
 
@@ -312,6 +320,9 @@ export class RoundRect extends Shape implements Movable {
     move(dx: number | Vec, dy?: number): Shape & Movable {
         let motion
         if (dx instanceof Vec) {
+            if (arguments.length != 1) {
+                throw new Error("Incorrect arguments to move()")
+            }
             motion = dx
         } else {
             motion = vec(dx, dy)
@@ -327,11 +338,11 @@ export class RoundRect extends Shape implements Movable {
         return result
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move_to = _default_move_to
+    transform = _default_transform<RoundRect>
+    scale = _default_scale<RoundRect>
+    rotate = _default_rotate<RoundRect>
+    transform_2to2 = _default_transform_2to2<RoundRect>
+    move_to = _default_move_to<RoundRect>
     clip = _default_clip
 }
 
@@ -463,11 +474,15 @@ export class Rect extends Shape implements Movable, Inflatable {
         return RectBorder.from_core_properties(this.left(), this.top(), this.right(), this.bottom(), 0)
     }
 
-    transform = _default_transform
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    is_axis_aligned_box() {
+        return true
+    }
+
+    transform = _default_transform<Rect>
+    rotate = _default_rotate<Rect>
+    transform_2to2 = _default_transform_2to2<Rect>
+    move = _default_move<Rect>
+    move_to = _default_move_to<Rect>
     clip = _default_clip
 }
 
@@ -498,7 +513,11 @@ export class Disk extends Shape implements Movable {
     }
 
     move(dx: number, dy: number) {
-        return new Disk().center(this.center().x + dx, this.center().y + dy).radius(this.radius())
+        const result = new Disk().center(this.center().x + dx, this.center().y + dy).radius(this.radius())
+        if (this.properties.has("fill")) {
+            result.properties.set("fill", this.properties.get("fill"))
+        }
+        return result
     }
 
     copy() {
@@ -511,11 +530,11 @@ export class Disk extends Shape implements Movable {
         return DiskBorder.from_core_properties(this.center(), this.radius(), 0)
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move_to = _default_move_to
+    transform = _default_transform<Disk>
+    scale = _default_scale<Disk>
+    rotate = _default_rotate<Disk>
+    transform_2to2 = _default_transform_2to2<Disk>
+    move_to = _default_move_to<Disk>
     clip = _default_clip
 }
 
@@ -524,6 +543,7 @@ export function disk() {
 }
 
 export class DiskBorder extends Shape implements Movable, Inflatable {
+    bbox = getter(this, "bbox")
     center = getter(this, "center")
     disk_radius: number
     thickness: number
@@ -532,6 +552,12 @@ export class DiskBorder extends Shape implements Movable, Inflatable {
         let result = new DiskBorder()
 
         result.properties.set("center", center)
+        result.properties.set("bbox", new Box(
+            center.x - disk_radius - thickness / 2,
+            center.y - disk_radius - thickness / 2,
+            center.x + disk_radius + thickness / 2,
+            center.y + disk_radius + thickness / 2,
+        ))
         result.thickness = thickness
         result.disk_radius = disk_radius
 
@@ -557,11 +583,11 @@ export class DiskBorder extends Shape implements Movable, Inflatable {
 
     open = _default_open
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move_to = _default_move_to
+    transform = _default_transform<DiskBorder>
+    scale = _default_scale<DiskBorder>
+    rotate = _default_rotate<DiskBorder>
+    transform_2to2 = _default_transform_2to2<DiskBorder>
+    move_to = _default_move_to<DiskBorder>
     clip = _default_clip
 }
 
@@ -606,11 +632,11 @@ export class Polygon extends Shape implements Movable {
         return <any>new Polygon(this.properties)
     }
 
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    scale = _default_scale<Polygon>
+    rotate = _default_rotate<Polygon>
+    transform_2to2 = _default_transform_2to2<Polygon>
+    move = _default_move<Polygon>
+    move_to = _default_move_to<Polygon>
     clip = _default_clip
 }
 
@@ -668,14 +694,14 @@ export class Line extends Shape implements Movable {
     }
 
     trim(amount: number, end_amount?: number) {
-        if (typeof end_amount === 'undefined') {
+        if (arguments.length == 1) {
             end_amount = amount
         }
         return this.trim_fraction(amount / this.length(), end_amount / this.length())
     }
 
     trim_fraction(fraction: number, end_fraction?: number) {
-        if (typeof end_fraction === 'undefined') {
+        if (arguments.length == 1) {
             end_fraction = fraction
         }
         assert(fraction + end_fraction <= 1)
@@ -689,12 +715,12 @@ export class Line extends Shape implements Movable {
         return <any>new Line(this.properties)
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    transform = _default_transform<Line>
+    scale = _default_scale<Line>
+    rotate = _default_rotate<Line>
+    transform_2to2 = _default_transform_2to2<Line>
+    move = _default_move<Line>
+    move_to = _default_move_to<Line>
     clip = _default_clip
 }
 
@@ -702,7 +728,8 @@ export function line() {
     return new Line()
 }
 
-export class LinearTransform extends Shape implements Movable {
+export type LinearTransformOf<T extends Shape> = T extends LinearTransform<infer C> ? LinearTransform<C> : LinearTransform<T>
+export class LinearTransform<C extends Shape> extends Shape implements Movable {
     bbox = getter(this, "bbox")
     child: Shape
     matrix: number[]
@@ -723,7 +750,7 @@ export class LinearTransform extends Shape implements Movable {
 
     compute_properties() {
         this.child.ensure_defined()
-        if (this.child instanceof Rect || this.child instanceof RectBorder) {
+        if (this.child.is_axis_aligned_box() && "bbox" in this.child && typeof this.child.bbox == "function") {
             // These are rect-shaped
             const child_bbox = this.child.bbox()
             let transformed_points = []
@@ -738,21 +765,21 @@ export class LinearTransform extends Shape implements Movable {
         }
     }
 
-    fill(fill) {
-        return <any>new LinearTransform(this.child.fill(fill), this.matrix)
+    fill(fill): this {
+        return <this>new LinearTransform(this.child.fill(fill), this.matrix)
     }
 
-    copy() {
+    copy(): this {
         this.ensure_defined()
-        return <any>new LinearTransform(this.child.copy(), this.matrix)
+        return <this>new LinearTransform(this.child.copy(), this.matrix)
     }
 
-    transform = _default_transform
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    transform = _default_transform<LinearTransform<C>>
+    scale = _default_scale<LinearTransform<C>>
+    rotate = _default_rotate<LinearTransform<C>>
+    transform_2to2 = _default_transform_2to2<LinearTransform<C>>
+    move = _default_move<LinearTransform<C>>
+    move_to = _default_move_to<LinearTransform<C>>
     clip = _default_clip
 }
 
@@ -782,10 +809,10 @@ export class Clipped extends Shape implements Movable {
         return result
     }
 
-    scale = _default_scale
-    rotate = _default_rotate
-    transform_2to2 = _default_transform_2to2
-    move = _default_move
-    move_to = _default_move_to
+    scale = _default_scale<Clipped>
+    rotate = _default_rotate<Clipped>
+    transform_2to2 = _default_transform_2to2<Clipped>
+    move = _default_move<Clipped>
+    move_to = _default_move_to<Clipped>
     clip = _default_clip
 }

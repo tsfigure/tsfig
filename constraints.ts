@@ -9,15 +9,15 @@ export class OverconstrainedError extends Error {
     }
 }
 
-export class UnderconstrainedError extends Error {}
+export class UnderconstrainedError extends Error { }
 
 export class EqSys {
     equations: Map<string, number[]>
-    
+
     constructor() {
         this.equations = new Map()
     }
-    
+
     add(name: string, a_coeff: number, b_coeff: number, result: number) {
         assert(!this.equations.has(name))
         if (this.equations.size == 2) {
@@ -26,7 +26,7 @@ export class EqSys {
         }
         this.equations.set(name, [a_coeff, b_coeff, result])
     }
-    
+
     add_if_exists(name: string, a_coeff: number, b_coeff: number, properties: Map<string, any>) {
         if (properties.has(name)) {
             this.add(name, a_coeff, b_coeff, properties.get(name))

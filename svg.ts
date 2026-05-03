@@ -12,7 +12,7 @@ class Element {
     constructor(tag, attributes_obj, children?: Element[]) {
         this.tag = tag
         this.attributes = new Map(Object.entries(attributes_obj))
-        if (typeof children !== "undefined") {
+        if (arguments.length == 3) {
             this.children = children
         } else {
             this.children = []
@@ -234,6 +234,20 @@ function create_aa_filters(): Element[] {
     return result
 }
 
+function background_element(figure: Figure, filter: string): Element {
+    const min_x = -figure.aspect_ratio()
+    const max_x = figure.aspect_ratio()
+    return new Element("rect", {
+        x: "" + min_x,
+        y: "-1",
+        width: "" + (max_x - min_x),
+        height: "2",
+        fill: `rgb(${figure.background().r * 255} ${figure.background().g * 255} ${figure.background().b * 255})`,
+        opacity: "" + figure.background().a,
+        filter: filter
+    })
+}
+
 export function svg_tree(figure: Figure, do_aa_fix: boolean): Element {
     const min_x = -figure.aspect_ratio()
     const max_x = figure.aspect_ratio()
@@ -242,22 +256,13 @@ export function svg_tree(figure: Figure, do_aa_fix: boolean): Element {
     if (do_aa_fix) {
         children.push(...create_aa_filters())
         for (const i of range(1, NUM_AA_LEVELS)) {
-            const shape_elements = [
-                new Element("rect", {
-                    x: "" + min_x,
-                    y: "-1",
-                    width: "" + (max_x - min_x),
-                    height: "2",
-                    fill: `rgb(${figure.background().r * 255} ${figure.background().g * 255} ${figure.background().b * 255})`,
-                    opacity: "" + figure.background().a,
-                    filter: `url(#aa-fix-layer${i})`
-                })
-            ]
+            const shape_elements = [background_element(figure, `url(#aa-fix-layer${i})`)]
             shape_elements.push(...svg_for_shape(figure, `url(#aa-fix-layer${i})`))
             children.push(new Element("g", { opacity: "" + 1 / i },
                 shape_elements))
         }
     } else {
+        children.push(background_element(figure, ""))
         children.push(...svg_for_shape(figure, ""))
     }
     return new Element("svg",
