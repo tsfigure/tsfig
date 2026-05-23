@@ -1,4 +1,5 @@
 import { CommandlineParser } from "./commandline.ts"
+import { load_builtin_font } from "./font.ts"
 import { svg_tree } from "./svg.ts"
 
 // '\x1B[2J\x1B[H'
@@ -19,6 +20,8 @@ async function main() {
     if (!path.startsWith("/")) {
         path = "./" + path
     }
+
+    await load_builtin_font()
 
     if (!args["watch"]) {
         await process_path(path, args)

@@ -72,6 +72,10 @@ export class Vec {
         return this.mul(1 / this.norm())
     }
 
+    direction() {
+        return Math.atan2(this.y, this.x) / Math.PI * 180
+    }
+
     rotate(degrees: number) {
         const radians = degrees / 180 * Math.PI
         const new_x = Math.cos(radians) * this.x - Math.sin(radians) * this.y

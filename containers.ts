@@ -35,7 +35,12 @@ export class UnionBase extends Shape implements Movable {
 
     move(dx: number | Vec, dy?: number): Shape & Movable {
         this.ensure_defined()
-        const transformed_children = this.children().map((c) => c.move(dx, dy))
+        let transformed_children
+        if (arguments.length == 1) {
+            transformed_children = this.children().map((c) => c.move(dx))
+        } else {
+            transformed_children = this.children().map((c) => c.move(dx, dy))
+        }
         return union(transformed_children)
     }
 

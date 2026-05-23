@@ -16,6 +16,7 @@
         "shapes.ts",
         "svg.ts",
         "test.ts",
+        "text.ts",
         "util.ts"
     ]
 }

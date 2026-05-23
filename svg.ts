@@ -1,15 +1,17 @@
 import { Figure, UnionBase } from "./containers.ts"
 import { rgb, SolidColor } from "./fill.ts"
+import { TTFFont } from "./font.ts"
 import { InflatedPath, MiteredPath, PathArcCommand, PathBezierCommand, PathLineCommand } from "./path.ts"
 import { Clipped, Disk, DiskBorder, Line, LinearTransform, Polygon, Rect, RectBorder, RoundRect, Shape } from "./shapes.ts"
+import { Text } from "./text.ts"
 import { assert, range, Vec } from "./util.ts"
 
 class Element {
     tag: string
     attributes: Map<string, string>
-    children: Element[]
+    children: (Element | TextNode)[]
 
-    constructor(tag, attributes_obj, children?: Element[]) {
+    constructor(tag, attributes_obj, children?: (Element | TextNode)[]) {
         this.tag = tag
         this.attributes = new Map(Object.entries(attributes_obj))
         if (arguments.length == 3) {
@@ -24,6 +26,193 @@ class Element {
         const open = `<${this.tag} ${attribute_strings.join(" ")}>`
         const close = `</${this.tag}>`
         return open + this.children.map((e) => e.text()).join("") + close
+    }
+}
+
+class TextNode {
+    content: string
+
+    constructor(content) {
+        this.content = content
+    }
+
+    text() {
+        return this.content.replaceAll("&", "&amp;").replaceAll("<", "&lt;")
+    }
+}
+
+class SvgMaker {
+    global_id: number = 0
+    font_required: TTFFont | null = null
+
+    svg_for_shape(shape: Shape, aa_filter: string): Element[] {
+        shape.ensure_defined()
+        if (shape instanceof Rect) {
+            const element = new Element("rect",
+                {
+                    x: "" + shape.left(),
+                    y: "" + shape.top(),
+                    width: "" + shape.width(),
+                    height: "" + shape.height(),
+                    fill: svg_fill(shape),
+                    opacity: svg_opacity(shape),
+                    filter: aa_filter,
+                })
+            return [element]
+        }
+        if (shape instanceof RectBorder) {
+            const thickness = shape.thickness
+            const element = new Element("rect", {
+                x: "" + (shape.left() + thickness / 2),
+                y: "" + (shape.top() + thickness / 2),
+                width: "" + (shape.width() - thickness),
+                height: "" + (shape.height() - thickness),
+                fill: "none",
+                stroke: svg_fill(shape),
+                opacity: svg_opacity(shape),
+                filter: aa_filter,
+                "stroke-width": "" + thickness,
+            })
+            return [element]
+        }
+        if (shape instanceof LinearTransform) {
+            const element = new Element("g",
+                { transform: svg_transform(shape.matrix) },
+                this.svg_for_shape(shape.child, aa_filter)
+            )
+            return [element]
+        }
+        if (shape instanceof UnionBase) {
+            let result = []
+            for (const child of shape.children()) {
+                result.push(...this.svg_for_shape(child, aa_filter))
+            }
+            return result
+        }
+        if (shape instanceof Disk) {
+            const element = new Element("circle",
+                {
+                    cx: shape.center().x,
+                    cy: shape.center().y,
+                    r: shape.radius(),
+                    fill: svg_fill(shape),
+                    opacity: svg_opacity(shape),
+                    filter: aa_filter,
+                })
+            return [element]
+        }
+        if (shape instanceof DiskBorder) {
+            const element = new Element("circle", {
+                cx: shape.center().x,
+                cy: shape.center().y,
+                r: "" + shape.disk_radius,
+                fill: "none",
+                stroke: svg_fill(shape),
+                opacity: svg_opacity(shape),
+                "stroke-width": "" + shape.thickness,
+            })
+            return [element]
+        }
+        if (shape instanceof Polygon) {
+            const element = new Element("polygon", {
+                points: shape.points().map((pt) => `${pt.x},${pt.y}`).join(" "),
+                fill: svg_fill(shape),
+                opacity: svg_opacity(shape),
+                filter: aa_filter,
+            })
+            return [element]
+        }
+        if (shape instanceof Line) {
+            const points = Line._get_points(shape.start(), shape.end(), shape.width())
+            const element = new Element("polygon", {
+                points: points.map((pt) => `${pt.x},${pt.y}`).join(" "),
+                fill: svg_fill(shape),
+                opacity: svg_opacity(shape),
+                filter: aa_filter,
+            })
+            return [element]
+        }
+        if (shape instanceof RoundRect) {
+            const element = new Element("rect", {
+                x: "" + shape.left(),
+                y: "" + shape.top(),
+                rx: "" + shape.radius,
+                ry: "" + shape.radius,
+                width: "" + shape.width(),
+                height: "" + shape.height(),
+                fill: svg_fill(shape),
+                opacity: svg_opacity(shape),
+                filter: aa_filter,
+            })
+            return [element]
+        }
+        if (shape instanceof Clipped) {
+            const mask_id = `p${this.global_id}`
+            this.global_id += 1
+            const mask = new Element("mask", { id: mask_id, type: "alpha" },
+                this.svg_for_shape(shape.clipper.fill(rgb(1, 1, 1)), aa_filter))
+
+            // TODO supprt Chrome < 120 (requires -webkit-mask)
+            let child_shape = shape.child
+            if (shape.properties.has("fill")) {
+                child_shape = shape.child.fill(shape.properties.get("fill"))
+            }
+
+            const child = new Element("g", { mask: `url(#${mask_id})` },
+                this.svg_for_shape(child_shape, aa_filter))
+            return [mask, child]
+        }
+        if (shape instanceof MiteredPath || shape instanceof InflatedPath) {
+            const attributes = {
+                d: svg_path_d(shape.start_pos, shape.commands),
+                fill: "none",
+                stroke: svg_fill(shape),
+                opacity: svg_opacity(shape),
+                filter: aa_filter,
+            }
+            if (shape instanceof MiteredPath) {
+                attributes["stroke-width"] = "" + shape.miter_size * 2
+                attributes["stroke-linejoin"] = "miter"
+            } else {
+                attributes["stroke-width"] = "" + shape.amount * 2
+                attributes["stroke-linejoin"] = "round"
+                attributes["stroke-linecap"] = "round"
+            }
+            const element = new Element("path", attributes)
+            return [element]
+        }
+        if (shape instanceof Text) {
+            this.font_required = shape.font
+            const sanitized_text = shape.font.sanitize(shape.text())
+            const element = new Element("text", {
+                x: "" + shape.left(),
+                y: "" + (shape.bottom() - shape.height() * shape.font.baseline_relative_height()),
+                "font-size": "" + shape.height(),
+                "font-family": "font1",
+                fill: svg_fill(shape),
+                opacity: svg_opacity(shape),
+                filter: aa_filter
+            }, [new TextNode(sanitized_text)])
+            return [element]
+        }
+    }
+
+    font_embedding(): Element[] {
+        if (this.font_required === null) {
+            return []
+        }
+        const font_bytes = this.font_required.bytes
+        let font_byte_strings = []
+        for (const byte of font_bytes) {
+            font_byte_strings.push(String.fromCharCode(byte))
+        }
+        const font_string = font_byte_strings.join('')
+        const style = `
+        @font-face {
+            font-family: "font1";
+            src: url("data:font/ttf;charset=utf-8;base64,${btoa(font_string)}");
+        }`
+        return [new Element("style", {}, [new TextNode(style)])]
     }
 }
 
@@ -71,145 +260,6 @@ function svg_path_d(start_pos: Vec, commands: any[]) {
     return result
 }
 
-let global_id = 0
-function svg_for_shape(shape: Shape, aa_filter: string): Element[] {
-    shape.ensure_defined()
-    if (shape instanceof Rect) {
-        const element = new Element("rect",
-            {
-                x: "" + shape.left(),
-                y: "" + shape.top(),
-                width: "" + shape.width(),
-                height: "" + shape.height(),
-                fill: svg_fill(shape),
-                opacity: svg_opacity(shape),
-                filter: aa_filter,
-            })
-        return [element]
-    }
-    if (shape instanceof RectBorder) {
-        const thickness = shape.thickness
-        const element = new Element("rect", {
-            x: "" + (shape.left() + thickness / 2),
-            y: "" + (shape.top() + thickness / 2),
-            width: "" + (shape.width() - thickness),
-            height: "" + (shape.height() - thickness),
-            fill: "none",
-            stroke: svg_fill(shape),
-            opacity: svg_opacity(shape),
-            filter: aa_filter,
-            "stroke-width": "" + thickness,
-        })
-        return [element]
-    }
-    if (shape instanceof LinearTransform) {
-        const element = new Element("g",
-            { transform: svg_transform(shape.matrix) },
-            svg_for_shape(shape.child, aa_filter)
-        )
-        return [element]
-    }
-    if (shape instanceof UnionBase) {
-        let result = []
-        for (const child of shape.children()) {
-            result.push(...svg_for_shape(child, aa_filter))
-        }
-        return result
-    }
-    if (shape instanceof Disk) {
-        const element = new Element("circle",
-            {
-                cx: shape.center().x,
-                cy: shape.center().y,
-                r: shape.radius(),
-                fill: svg_fill(shape),
-                opacity: svg_opacity(shape),
-                filter: aa_filter,
-            })
-        return [element]
-    }
-    if (shape instanceof DiskBorder) {
-        const element = new Element("circle", {
-            cx: shape.center().x,
-            cy: shape.center().y,
-            r: "" + shape.disk_radius,
-            fill: "none",
-            stroke: svg_fill(shape),
-            opacity: svg_opacity(shape),
-            "stroke-width": "" + shape.thickness,
-        })
-        return [element]
-    }
-    if (shape instanceof Polygon) {
-        const element = new Element("polygon", {
-            points: shape.points().map((pt) => `${pt.x},${pt.y}`).join(" "),
-            fill: svg_fill(shape),
-            opacity: svg_opacity(shape),
-            filter: aa_filter,
-        })
-        return [element]
-    }
-    if (shape instanceof Line) {
-        const points = Line._get_points(shape.start(), shape.end(), shape.width())
-        const element = new Element("polygon", {
-            points: points.map((pt) => `${pt.x},${pt.y}`).join(" "),
-            fill: svg_fill(shape),
-            opacity: svg_opacity(shape),
-            filter: aa_filter,
-        })
-        return [element]
-    }
-    if (shape instanceof RoundRect) {
-        const element = new Element("rect", {
-            x: "" + shape.left(),
-            y: "" + shape.top(),
-            rx: "" + shape.radius,
-            ry: "" + shape.radius,
-            width: "" + shape.width(),
-            height: "" + shape.height(),
-            fill: svg_fill(shape),
-            opacity: svg_opacity(shape),
-            filter: aa_filter,
-        })
-        return [element]
-    }
-    if (shape instanceof Clipped) {
-        const mask_id = `p${global_id}`
-        global_id += 1
-        const mask = new Element("mask", { id: mask_id, type: "alpha" },
-            svg_for_shape(shape.clipper.fill(rgb(1, 1, 1)), aa_filter))
-
-        // TODO supprt Chrome < 120 (requires -webkit-mask)
-        let child_shape = shape.child
-        if (shape.properties.has("fill")) {
-            child_shape = shape.child.fill(shape.properties.get("fill"))
-        }
-
-        const child = new Element("g", { mask: `url(#${mask_id})` },
-            svg_for_shape(child_shape, aa_filter))
-        return [mask, child]
-    }
-    if (shape instanceof MiteredPath || shape instanceof InflatedPath) {
-        const attributes = {
-            d: svg_path_d(shape.start_pos, shape.commands),
-            fill: "none",
-            stroke: svg_fill(shape),
-            opacity: svg_opacity(shape),
-            filter: aa_filter,
-        }
-        if (shape instanceof MiteredPath) {
-            attributes["stroke-width"] = "" + shape.miter_size * 2
-            attributes["stroke-linejoin"] = "miter"
-        } else {
-            attributes["stroke-width"] = "" + shape.amount * 2
-            attributes["stroke-linejoin"] = "round"
-            attributes["stroke-linecap"] = "round"
-        }
-        const element = new Element("path", attributes)
-        return [element]
-    }
-}
-
 const NUM_AA_LEVELS = 10
 function create_aa_filters(): Element[] {
     const result = []
@@ -252,19 +302,24 @@ export function svg_tree(figure: Figure, do_aa_fix: boolean): Element {
     const min_x = -figure.aspect_ratio()
     const max_x = figure.aspect_ratio()
     const children = []
+    const svg_maker = new SvgMaker()
 
     if (do_aa_fix) {
         children.push(...create_aa_filters())
         for (const i of range(1, NUM_AA_LEVELS)) {
             const shape_elements = [background_element(figure, `url(#aa-fix-layer${i})`)]
-            shape_elements.push(...svg_for_shape(figure, `url(#aa-fix-layer${i})`))
+            shape_elements.push(...svg_maker.svg_for_shape(figure, `url(#aa-fix-layer${i})`))
             children.push(new Element("g", { opacity: "" + 1 / i },
                 shape_elements))
         }
     } else {
         children.push(background_element(figure, ""))
-        children.push(...svg_for_shape(figure, ""))
+        children.push(...svg_maker.svg_for_shape(figure, ""))
     }
+
+    const font_embedding_elements = svg_maker.font_embedding();
+    children.splice(0, 0, ...font_embedding_elements)
+
     return new Element("svg",
         {
             viewBox: `${min_x} -1 ${max_x - min_x} 2`,
