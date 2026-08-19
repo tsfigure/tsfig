@@ -1,4 +1,4 @@
-import { Figure, UnionBase } from "./containers.ts"
+import { Figure, Union, Group } from "./containers.ts"
 import { rgb, SolidColor } from "./fill.ts"
 import { TTFFont } from "./font.ts"
 import { InflatedPath, MiteredPath, PathArcCommand, PathBezierCommand, PathLineCommand } from "./path.ts"
@@ -76,13 +76,29 @@ class SvgMaker {
             return [element]
         }
         if (shape instanceof LinearTransform) {
+            const child_elements = this.svg_for_shape(shape.child, '')
+            const result = child_elements.map(e => {
+                const transformed = new Element("g",
+                    { transform: svg_transform(shape.matrix) },
+                    [e]
+                )
+                return new Element("g",
+                    { filter: aa_filter }, [transformed])
+            })
+            return result
+        }
+        if (shape instanceof Union) {
+            const children = []
+            for (const child of shape.children()) {
+                children.push(...this.svg_for_shape(child, aa_filter))
+            }
             const element = new Element("g",
-                { transform: svg_transform(shape.matrix) },
-                this.svg_for_shape(shape.child, aa_filter)
+                { fill: svg_fill(shape) },
+                children
             )
             return [element]
         }
-        if (shape instanceof UnionBase) {
+        if (shape instanceof Group) {
             let result = []
             for (const child of shape.children()) {
                 result.push(...this.svg_for_shape(child, aa_filter))
@@ -218,7 +234,8 @@ class SvgMaker {
 
 function svg_fill(shape: Shape) {
     if (!shape.properties.has("fill")) {
-        return "black"
+        // Will be inherited from a surrounding group (<g>)
+        return ""
     }
     const fill = shape.properties.get("fill")
     if (fill instanceof SolidColor) {
@@ -272,7 +289,14 @@ function create_aa_filters(): Element[] {
                 table_values.push("1")
             }
         }
-        result.push(new Element("filter", { id: `aa-fix-layer${i}` },
+        result.push(new Element("filter", {
+            id: `aa-fix-layer${i}`,
+            filterUnits: "userSpaceOnUse",
+            x: "-1",
+            y: "-1",
+            width: "2",
+            height: "2"
+        },
             [new Element("feComponentTransfer", {}, [
                 new Element("feFuncA", {
                     type: "discrete",
@@ -323,6 +347,7 @@ export function svg_tree(figure: Figure, do_aa_fix: boolean): Element {
     return new Element("svg",
         {
             viewBox: `${min_x} -1 ${max_x - min_x} 2`,
+            fill: "none",   //  Make elements without explicit fill transparent
             xmlns: "http://www.w3.org/2000/svg"
         },
         children)

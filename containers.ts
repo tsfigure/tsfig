@@ -3,7 +3,30 @@ import { rgba } from "./fill.ts"
 import { _default_clip, _default_move, _default_move_to, _default_rotate, _default_scale, _default_transform_2to2, getter, LinearTransform, Movable, setter, Shape } from "./shapes.ts"
 import { assert, Box, boxes_bbox, range, vec, Vec } from "./util.ts"
 
-export class UnionBase extends Shape implements Movable {
+type ContainerSubclass = Container & { copy_with_transformed_children: any }
+
+function _default_container_transform<T extends ContainerSubclass>(this: T, matrix: number[]):
+    ReturnType<T["copy_with_transformed_children"]> {
+    this.ensure_defined()
+    const transformed_children = this.children().map((c) => c.transform(matrix))
+    return this.copy_with_transformed_children(transformed_children)
+}
+
+// Handle `move` separately from other container transforms because the children might have a
+// specialized `move` implementation that is different from their `transform` implementation
+function _default_container_move<T extends ContainerSubclass>(this: T, dx: number | Vec, dy?: number):
+    ReturnType<T["copy_with_transformed_children"]> {
+    this.ensure_defined()
+    let transformed_children
+    if (arguments.length == 1) {
+        transformed_children = this.children().map((c) => c.move(dx))
+    } else {
+        transformed_children = this.children().map((c) => c.move(dx, dy))
+    }
+    return this.copy_with_transformed_children(transformed_children)
+}
+
+export class Container extends Shape {
     bbox = getter(this, "bbox")
     children = getter(this, "children")
 
@@ -27,35 +50,6 @@ export class UnionBase extends Shape implements Movable {
         this.compute_bbox()
     }
 
-    transform(matrix: number[]) {
-        this.ensure_defined()
-        const transformed_children = this.children().map((c) => c.transform(matrix))
-        return union(transformed_children)
-    }
-
-    move(dx: number | Vec, dy?: number): Shape & Movable {
-        this.ensure_defined()
-        let transformed_children
-        if (arguments.length == 1) {
-            transformed_children = this.children().map((c) => c.move(dx))
-        } else {
-            transformed_children = this.children().map((c) => c.move(dx, dy))
-        }
-        return union(transformed_children)
-    }
-
-    copy() {
-        return <any>new Union(this.properties)
-    }
-
-    fill(fill: any): this {
-        this.ensure_defined()
-        const filled_children = this.properties.get("children").map((c) => c.fill(fill))
-        const result_properties = new Map(this.properties)
-        result_properties.set("children", filled_children)
-        return <any>new Union(result_properties)
-    }
-
     child(name: string | number) {
         this.ensure_defined()
         if (typeof name === 'number') {
@@ -65,17 +59,53 @@ export class UnionBase extends Shape implements Movable {
         if (typeof named_children === 'undefined' || !named_children.has(name)) {
             throw new Error(`Requesting non-existing child '${name}'`)
         }
-        return named_children.get(name)
+        return this.children()[named_children.get(name)]
+    }
+}
+
+export class Union extends Container implements Movable {
+
+    add(...shapes: (Shape & Movable)[]) {
+        assert(!this.finalized)
+        if (!this.properties.has("children")) {
+            this.properties.set("children", [])
+        }
+        for (const shape of shapes) {
+            this.properties.get("children").push(shape.geometry())
+        }
+        return this
     }
 
-    scale = _default_scale<UnionBase>
-    rotate = _default_rotate<UnionBase>
-    transform_2to2 = _default_transform_2to2<UnionBase>
-    move_to = _default_move_to<UnionBase>
+    copy() {
+        this.ensure_defined()
+        return <any>new Union(this.properties)
+    }
+
+    copy_with_transformed_children(transformed_children: (Shape & Movable)[]) {
+        let result = union(transformed_children)
+        if (this.properties.has("fill")) {
+            result = result.fill(this.properties.get("fill"))
+        }
+        return result
+    }
+
+    inflate(amount: number): Union {
+        assert(amount >= 0)
+        this.ensure_defined()
+        const transformed_children = this.children().map((c) => c.inflate(amount))
+        return this.copy_with_transformed_children(transformed_children)
+    }
+
+    transform = _default_container_transform<Union>
+    scale = _default_scale<Union>
+    rotate = _default_rotate<Union>
+    transform_2to2 = _default_transform_2to2<Union>
+    move = _default_container_move<Union>
+    move_to = _default_move_to<Union>
     clip = _default_clip
 }
 
-export class Union extends UnionBase implements Movable {
+export class Group extends Container implements Movable {
 
     add(...shapes: (Shape & Movable)[]) {
         assert(!this.finalized)
@@ -90,14 +120,53 @@ export class Union extends UnionBase implements Movable {
 
     add_named(shape: Shape & Movable, name: string) {
         this.add(shape)
+        const idx = this.properties.get("children").length - 1
         if (!this.properties.has("named_children")) {
             this.properties.set("named_children", new Map())
         }
-        this.properties.get("named_children").set(name, shape)
+        const named_children = this.properties.get("named_children")
+        if (named_children.has(name)) {
+            throw new Error(`Duplicate child name '${name}'`)
+        }
+        named_children.set(name, idx)
+        return this
     }
+
+    fill(fill: any): this {
+        this.ensure_defined()
+        const filled_children = this.properties.get("children").map((c) => c.fill(fill))
+        return <any>this.copy_with_transformed_children(filled_children)
+    }
+
+    miter(amount: number) {
+        this.ensure_defined()
+        const new_children = this.properties.get("children").map((c) => c.miter(amount))
+        return this.copy_with_transformed_children(new_children)
+    }
+
+    copy() {
+        this.ensure_defined()
+        return <any>new Group(this.properties)
+    }
+
+    copy_with_transformed_children(transformed_children: (Shape & Movable)[]): Group {
+        let result = group(transformed_children)
+        if (this.properties.has("named_children")) {
+            result.properties.set("named_children", this.properties.get("named_children"))
+        }
+        return result
+    }
+
+    transform = _default_container_transform<Group>
+    scale = _default_scale<Group>
+    rotate = _default_rotate<Group>
+    transform_2to2 = _default_transform_2to2<Group>
+    move = _default_container_move<Group>
+    move_to = _default_move_to<Group>
+    clip = _default_clip
 }
 
-export class Figure extends Union implements Movable {
+export class Figure extends Group implements Movable {
     aspect_ratio = setter(this, "aspect_ratio")
     background = setter(this, "background")
 
@@ -111,41 +180,68 @@ export class Figure extends Union implements Movable {
         super.compute_properties()
     }
 
-    transform(matrix: number[]): Figure {
+    copy() {
+        this.ensure_defined()
+        return <any>new Figure(this.properties)
+    }
+
+    copy_with_transformed_children(transformed_children: (Shape & Movable)[]): Figure {
         const result = new Figure().aspect_ratio(this.aspect_ratio()).background(this.background())
-        for (const child of this.children()) {
-            result.add(child.transform(matrix))
+        for (const child of transformed_children) {
+            result.add(child)
         }
         return result
     }
 
+    transform = _default_container_transform<Figure>
     scale = _default_scale<Figure>
     rotate = _default_rotate<Figure>
     transform_2to2 = _default_transform_2to2<Figure>
-    move = _default_move<Figure>
+    move = _default_container_move<Figure>
     move_to = _default_move_to<Figure>
     clip = _default_clip
 }
 
-export function union(...children: (Shape & Movable)[] | [(Shape & Movable)[]] | [object]): Union {
-    const result = new Union()
+// Common handler for the arguments of union(), group() and linear(). Can be
+// 1. f(child1, child2, ...)
+// 2. f([child1, child2, ...]), or
+// 3. f({name1: child1, name2: child2, ...}) (group only)
+// (f = union / group / linear)
+function add_children(target: Union | Group, children: (Shape & Movable)[] | [(Shape & Movable)[]] | [object]) {
+    if (children.length == 0) {
+        return
+    }
     if (children[0] instanceof Array) {
         children = children[0]
     } else if (!(children[0] instanceof Shape)) {
+        if (target instanceof Union) {
+            throw new Error("Union doesn't support named children")
+        }
         const obj = children[0]
         for (const name in obj) {
-            result.add_named(obj[name], name)
+            target.add_named(obj[name], name)
         }
-        return result
+        return
     }
 
     for (const child of <(Shape & Movable)[]>children) {
-        result.add(child)
+        target.add(child)
     }
+}
+
+export function union(...children: (Shape & Movable)[] | [(Shape & Movable)[]] | [object]): Union {
+    const result = new Union()
+    add_children(result, children)
     return result
 }
 
-export class Linear extends UnionBase implements Movable {
+export function group(...children: (Shape & Movable)[] | [(Shape & Movable)[]] | [object]): Group {
+    const result = new Group()
+    add_children(result, children)
+    return result
+}
+
+export class Linear extends Group implements Movable {
     left = setter(this, "left")
     top = setter(this, "top")
     right = setter(this, "right")
@@ -340,15 +436,26 @@ export class Linear extends UnionBase implements Movable {
         this.ensure_defined()
         return <any>new Linear(this.properties)
     }
+
+    copy_with_transformed_children(transformed_children: (Shape & Movable)[]): Group {
+        let result = group(transformed_children)
+        if (this.properties.has("named_children")) {
+            result.properties.set("named_children", this.properties.get("named_children"))
+        }
+        return result
+    }
+
+    transform = _default_container_transform<Linear>
+    scale = _default_scale<Linear>
+    rotate = _default_rotate<Linear>
+    transform_2to2 = _default_transform_2to2<Linear>
+    move = _default_container_move<Linear>
+    move_to = _default_move_to<Linear>
+    clip = _default_clip
 }
 
-export function linear(...children: Shape[] | [Shape[]]) {
+export function linear(...children: (Shape & Movable)[] | [(Shape & Movable)[]] | [object]) {
     const result = new Linear()
-    if (children[0] instanceof Array) {
-        children = children[0]
-    }
-    for (const child of <Shape[]>children) {
-        result.add(child)
-    }
+    add_children(result, children)
     return result
 }

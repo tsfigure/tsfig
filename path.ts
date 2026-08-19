@@ -190,6 +190,14 @@ export class Path extends Shape implements Movable {
         this.commands = []
     }
 
+    static from_core_properties(start_pos: Vec, commands: any[]) {
+        const result = new Path()
+        result.start_pos = start_pos
+        result.commands = commands
+        result.ensure_defined()
+        return result
+    }
+
     start(x: number | Vec, y?: number) {
         assert(this.commands.length == 0)
         if (x instanceof Vec && arguments.length == 1) {
@@ -288,11 +296,29 @@ export class Path extends Shape implements Movable {
         return InflatedPath.from_core_properties(this.start_pos, this.commands, amount)
     }
 
+    move(dx: number | Vec, dy?: number) {
+        this.ensure_defined()
+        let motion
+        if (dx instanceof Vec) {
+            if (arguments.length != 1) {
+                throw new Error("Incorrect arguments to move()")
+            }
+            motion = dx
+        } else {
+            motion = vec(dx, dy)
+        }
+
+        const result = Path.from_core_properties(this.start_pos.add(motion), this.commands)
+        if (this.properties.has("fill")) {
+            result.properties.set("fill", this.properties.get("fill"))
+        }
+        return result
+    }
+
     transform = _default_transform<Path>
     scale = _default_scale<Path>
     rotate = _default_rotate<Path>
     transform_2to2 = _default_transform_2to2<Path>
-    move = _default_move<Path>
     move_to = _default_move_to<Path>
     clip = _default_clip
 }

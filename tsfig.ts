@@ -17,9 +17,7 @@ async function main() {
     }
 
     let path = args.arguments[0]
-    if (!path.startsWith("/")) {
-        path = "./" + path
-    }
+    path = Deno.realPathSync(path)
 
     await load_builtin_font()
 

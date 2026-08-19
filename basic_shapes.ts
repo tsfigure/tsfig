@@ -28,6 +28,7 @@ export function setter<T extends Shape>(obj: T, property: string, maker?: (...ar
                 return obj
             }
             obj.ensure_defined()
+            assert(obj.properties.has(property))
             return obj.properties.get(property)
         }
         return result
@@ -61,11 +62,11 @@ export function collector<T extends Shape>(obj: T, property: string, element_mak
     return add_element
 }
 
-export function _default_transform<T extends Shape>(this: T, matrix: number[]): LinearTransformOf<T> {
+export function _default_transform<T extends Shape>(matrix: number[]): LinearTransformOf<T> {
     return <any>new LinearTransform(this, matrix)
 }
 
-export function _default_rotate<T extends { transform: any }>(this: T, degrees: number):
+export function _default_rotate<T extends { transform: any }>(degrees: number):
     ReturnType<T["transform"]> {
     const radians = degrees / 180 * Math.PI
     return this.transform([
@@ -74,7 +75,7 @@ export function _default_rotate<T extends { transform: any }>(this: T, degrees: 
     ])
 }
 
-export function _default_scale<T extends { transform: any }>(this: T, x_scale: number, ...y_scale: number[]):
+export function _default_scale<T extends { transform: any }>(x_scale: number, ...y_scale: number[]):
     ReturnType<T["transform"]> {
     if (y_scale.length == 0) {
         return this.transform([
@@ -88,7 +89,7 @@ export function _default_scale<T extends { transform: any }>(this: T, x_scale: n
     ])
 }
 
-export function _default_move<T extends { transform: any }>(this: T, dx: number | Vec, ...dy: number[]):
+export function _default_move<T extends { transform: any }>(dx: number | Vec, ...dy: number[]):
     ReturnType<T["transform"]> {
     if (dx instanceof Vec) {
         if (dy.length == 0) {
@@ -106,12 +107,12 @@ export function _default_move<T extends { transform: any }>(this: T, dx: number 
     ])
 }
 
-export function _default_move_to<T extends { move: any }>(this: T, what: Vec, where: Vec):
+export function _default_move_to<T extends { move: any }>(what: Vec, where: Vec):
     ReturnType<T["move"]> {
     return this.move(where.x - what.x, where.y - what.y)
 }
 
-export function _default_transform_2to2<T extends { transform: any }>(this: T, what1: Vec, what2: Vec, where1: Vec, where2: Vec):
+export function _default_transform_2to2<T extends { transform: any }>(what1: Vec, what2: Vec, where1: Vec, where2: Vec):
     ReturnType<T["transform"]> {
     const from_vec = what2.sub(what1)
     const to_vec = where2.sub(where1)
@@ -182,6 +183,12 @@ export class Shape {
         return result
     }
 
+    geometry(): this {
+        let result = this.copy()
+        result.properties.delete("fill")
+        return result
+    }
+
     copy(): this {
         throw new Error(`copy() not implemented for ${this.constructor.name}`)
     }
@@ -229,9 +236,40 @@ export class RectBorder extends Shape implements Movable {
         return result
     }
 
+    move(dx: number | Vec, ...dy: number[]) {
+        this.ensure_defined()
+        let delta_x
+        let delta_y
+        if (dx instanceof Vec) {
+            if (dy.length == 0) {
+                delta_x = dx.x
+                delta_y = dx.y
+            } else {
+                throw new Error("Incorrect arguments to move()")
+            }
+        } else {
+            delta_x = dx
+            delta_y = dy[0]
+        }
+        const result = RectBorder.from_core_properties(
+            this.left() + delta_x,
+            this.top() + delta_y,
+            this.right() + delta_x,
+            this.bottom() + delta_y,
+            this.thickness)
+        if (this.properties.has("fill")) {
+            result.properties.set("fill", this.properties.get("fill"))
+        }
+        return result
+    }
+
     miter(amount: number) {
         assert(amount >= 0)
-        return RectBorder.from_core_properties(this.rect_left, this.rect_top, this.rect_right, this.rect_bottom, this.thickness + amount)
+        const result = RectBorder.from_core_properties(this.rect_left, this.rect_top, this.rect_right, this.rect_bottom, this.thickness + amount)
+        if (this.properties.has("fill")) {
+            result.properties.set("fill", this.properties.get("fill"))
+        }
+        return result
     }
 
     copy() {
@@ -249,7 +287,6 @@ export class RectBorder extends Shape implements Movable {
     scale = _default_scale<RectBorder>
     rotate = _default_rotate<RectBorder>
     transform_2to2 = _default_transform_2to2<RectBorder>
-    move = _default_move<RectBorder>
     move_to = _default_move_to<RectBorder>
     clip = _default_clip
 }
@@ -266,7 +303,6 @@ export class RoundRect extends Shape implements Movable {
     radius: number
 
     static from_core_properties(left, top, right, bottom, radius) {
-        console.log("roundrect", left, top, right, bottom)
         const properties = new Map<string, any>(
             [
                 ["left", left],
@@ -566,10 +602,15 @@ export class DiskBorder extends Shape implements Movable, Inflatable {
 
     move(dx: number, dy: number) {
         const new_center = new Vec(this.center().x + dx, this.center().y + dy)
-        return DiskBorder.from_core_properties(new_center, this.disk_radius, this.thickness)
+        const result = DiskBorder.from_core_properties(new_center, this.disk_radius, this.thickness)
+        if (this.properties.has("fill")) {
+            result.properties.set("fill", this.properties.get("fill"))
+        }
+        return result
     }
 
     copy() {
+        this.ensure_defined()
         let result = new DiskBorder(this.properties)
         result.disk_radius = this.disk_radius
         result.thickness = this.thickness
@@ -578,7 +619,11 @@ export class DiskBorder extends Shape implements Movable, Inflatable {
 
     inflate(amount: number) {
         assert(amount >= 0)
-        return DiskBorder.from_core_properties(this.center(), this.disk_radius, this.thickness + amount * 2)
+        const result = DiskBorder.from_core_properties(this.center(), this.disk_radius, this.thickness + amount * 2)
+        if (this.properties.has("fill")) {
+            result.properties.set("fill", this.properties.get("fill"))
+        }
+        return result
     }
 
     open = _default_open
@@ -657,6 +702,9 @@ export class Line extends Shape implements Movable {
     compute_properties() {
         let start
         let end
+        if (!this.properties.has("width")) {
+            this.properties.set("width", 0)
+        }
         if (this.properties.has("vector")) {
             if (this.properties.has("start") && this.properties.has("end")) {
                 throw new Error("Cannot specify start, end and vector together")
@@ -713,6 +761,22 @@ export class Line extends Shape implements Movable {
     copy() {
         this.ensure_defined()
         return <any>new Line(this.properties)
+    }
+
+    inflate(amount: number): LinearTransform<Rect> | LinearTransform<RoundRect> {
+        const len = this.length()
+        let inflated_rect = rect().left(0).right(len).height(this.width())
+            .inflate(amount)
+        if (this.properties.has("fill")) {
+            inflated_rect = inflated_rect.fill(this.properties.get("fill"))
+        }
+
+        // Split to two cases to please Typescript's type inference
+        if (inflated_rect instanceof Rect) {
+            return inflated_rect.transform_2to2(vec(0, 0), vec(len, 0), this.start(), this.end())
+        } else {
+            return inflated_rect.transform_2to2(vec(0, 0), vec(len, 0), this.start(), this.end())
+        }
     }
 
     transform = _default_transform<Line>
