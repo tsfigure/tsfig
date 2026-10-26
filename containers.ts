@@ -26,6 +26,7 @@ function _default_container_move<T extends ContainerSubclass>(this: T, dx: numbe
     return this.copy_with_transformed_children(transformed_children)
 }
 
+/** @ignore */
 export class Container extends Shape {
     bbox = getter(this, "bbox")
     children = getter(this, "children")
@@ -166,8 +167,28 @@ export class Group extends Container implements Movable {
     clip = _default_clip
 }
 
+/**
+ * Represents a whole figure. A tsfigure file should export an object of
+ * this type.
+ */
 export class Figure extends Group implements Movable {
+    /**
+     * The aspect ratio (width / height). Small values give thin and tall
+     * figures and large values give wide figures. 1 (the default) gives a
+     * square figure.
+     *
+     * Setting the aspect ratio changes what x coordinates are visible. The
+     * visible portion of the figure is:
+     *
+     * -(aspect ratio) ≤ x ≤ (aspect ratio)<br>
+     * -1 ≤ y ≤ 1
+     */
     aspect_ratio = setter(this, "aspect_ratio")
+
+    /**
+     * The background color for the figure (see {@link rgb}). The default
+     * is transparent background.
+     */
     background = setter(this, "background")
 
     compute_properties(): void {
@@ -185,6 +206,7 @@ export class Figure extends Group implements Movable {
         return <any>new Figure(this.properties)
     }
 
+    /** @ignore */
     copy_with_transformed_children(transformed_children: (Shape & Movable)[]): Figure {
         const result = new Figure().aspect_ratio(this.aspect_ratio()).background(this.background())
         for (const child of transformed_children) {
@@ -229,7 +251,19 @@ function add_children(target: Union | Group, children: (Shape & Movable)[] | [(S
     }
 }
 
-export function union(...children: (Shape & Movable)[] | [(Shape & Movable)[]] | [object]): Union {
+/**
+ * Create a {@link Union}
+ *
+ * @param children - Array of shapes to be unified.
+ */
+export function union(children: (Shape & Movable)[]): Union
+/**
+ * Create a {@link Union}
+ *
+ * @param children - Shapes to be unified.
+ */
+export function union(...children: (Shape & Movable)[]): Union
+export function union(...children: (Shape & Movable)[] | [(Shape & Movable)[]]): Union {
     const result = new Union()
     add_children(result, children)
     return result
@@ -241,6 +275,17 @@ export function group(...children: (Shape & Movable)[] | [(Shape & Movable)[]] |
     return result
 }
 
+/**
+ * A group that places its members along a horizontal or vertical line, with
+ * equal gaps between them. Use {@link Linear.direction direction} to set the direction
+ * (horizontal or vertical) and {@link Linear.gap gap} to set the gap between objects.
+ *
+ * Each member shape can have a "handle" defined for it. If defined, the shapes are
+ * placed with equal gaps between the _handles_. By default, the handle of each
+ * shape is the shape itself.
+ *
+ * <img src="docs_src/linear.ts.svg" width="50%"/>
+ */
 export class Linear extends Group implements Movable {
     left = setter(this, "left")
     top = setter(this, "top")
@@ -252,7 +297,13 @@ export class Linear extends Group implements Movable {
     center = setter(this, "center", vec)
     center_x = setter(this, "center_x")
     center_y = setter(this, "center_y")
+
+    /** Set or get the direction of the layout. Possible values: "right" (left
+     * to right), "left" (right to left), "up" (bottom to top), "down" (top to
+     * bottom).
+     */
     direction = setter(this, "direction")
+    justify = setter(this, "justify")
     bbox = getter(this, "bbox")
     children = getter(this, "children")
 
@@ -265,6 +316,21 @@ export class Linear extends Group implements Movable {
             throw new Error("'direction' not specified for Linear")
         }
         const direction = this.properties.get("direction")
+
+        if (!this.properties.has("justify")) {
+            this.properties.set("justify", "center")
+        }
+        const justify = this.properties.get("justify")
+        if (direction == "right" || direction == "left") {
+            if (!["top", "bottom", "center"].includes(justify)) {
+                throw new Error(`Invalid justification '${justify}' for direction '${direction}'`)
+            }
+        }
+        if (direction == "up" || direction == "down") {
+            if (!["left", "right", "center"].includes(justify)) {
+                throw new Error(`Invalid justification '${justify}' for direction '${direction}'`)
+            }
+        }
 
         // Sum children
         for (const child of this.properties.get("handles")) {
@@ -341,20 +407,44 @@ export class Linear extends Group implements Movable {
         const perp_center = (perp_min + perp_max) / 2
 
         // Compute start pos
-        // TODO: justifications other than "center"
-        let pos
+        let pos_x
+        let pos_y
+        if (direction == "right" || direction == "left") {
+            if (justify == "center") {
+                pos_y = perp_center
+            }
+            if (justify == "top") {
+                pos_y = perp_min
+            }
+            if (justify == "bottom") {
+                pos_y = perp_max
+            }
+        } else {
+            if (justify == "center") {
+                pos_x = perp_center
+            }
+            if (justify == "left") {
+                pos_x = perp_min
+            }
+            if (justify == "right") {
+                pos_x = perp_max
+            }
+        }
+
         if (direction == "right") {
-            pos = vec(along_min, perp_center)
+            pos_x = along_min
         }
         if (direction == "left") {
-            pos = vec(along_max, perp_center)
+            pos_x = along_max
         }
         if (direction == "down") {
-            pos = vec(perp_center, along_min)
+            pos_y = along_min
         }
         if (direction == "up") {
-            pos = vec(perp_center, along_max)
+            pos_y = along_max
         }
+
+        let pos = vec(pos_x, pos_y)
 
         // Compute spacing
         let spacing
@@ -378,23 +468,59 @@ export class Linear extends Group implements Movable {
 
         let transformed_children = []
         for (const i of range(num_children)) {
-            const bbox: Box = this.properties.get("handles")[i].bbox()
+            const handle_shape = this.properties.get("handles")[i]
+            const bbox: Box = handle_shape.bbox()
+            if (typeof bbox === "undefined") {
+                throw new Error(`Cannot layout: Cannot compute bounding box of ${handle_shape.constructor.name}`)
+            }
             let handle
             let size
             if (direction == "right") {
-                handle = bbox.left_center
+                if (justify == "center") {
+                    handle = bbox.left_center
+                }
+                if (justify == "top") {
+                    handle = bbox.top_left
+                }
+                if (justify == "bottom") {
+                    handle = bbox.bottom_left
+                }
                 size = vec(bbox.width, 0)
             }
             if (direction == "left") {
-                handle = bbox.right_center
+                if (justify == "center") {
+                    handle = bbox.right_center
+                }
+                if (justify == "top") {
+                    handle = bbox.top_right
+                }
+                if (justify == "bottom") {
+                    handle = bbox.bottom_right
+                }
                 size = vec(-bbox.width, 0)
             }
             if (direction == "down") {
-                handle = bbox.top_center
+                if (justify == "center") {
+                    handle = bbox.right_center
+                }
+                if (justify == "left") {
+                    handle = bbox.top_left
+                }
+                if (justify == "right") {
+                    handle = bbox.top_right
+                }
                 size = vec(0, bbox.height)
             }
             if (direction == "up") {
-                handle = bbox.bottom_center
+                if (justify == "center") {
+                    handle = bbox.right_center
+                }
+                if (justify == "left") {
+                    handle = bbox.bottom_left
+                }
+                if (justify == "right") {
+                    handle = bbox.bottom_right
+                }
                 size = vec(0, -bbox.height)
             }
             transformed_children.push(this.properties.get("children")[i].move_to(handle, pos))

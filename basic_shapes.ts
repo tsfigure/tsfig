@@ -2,6 +2,7 @@ import { EqSys } from './constraints.ts'
 import { path } from './shapes.ts'
 import { angle, assert, Box, interpolate, matmul, points_bbox, vec, Vec } from './util.ts'
 
+/** @ignore */
 export function setter<T extends Shape>(obj: T, property: string): ((() => any) & ((...args) => T));
 export function setter<T extends Shape, M extends (...args: any) => any>(obj: T, property: string, maker: M): ((() => any) & ((...args: Parameters<M>) => T));
 export function setter<T extends Shape>(obj: T, property: string, maker?: (...args: any) => any): ((() => any) & ((...args) => T)) {
@@ -35,6 +36,7 @@ export function setter<T extends Shape>(obj: T, property: string, maker?: (...ar
     }
 }
 
+/** @ignore */
 export function getter(obj: Shape, property: string) {
     function result(...args: any[]) {
         if (args.length > 0) {
@@ -47,6 +49,7 @@ export function getter(obj: Shape, property: string) {
     return result
 }
 
+/** @ignore */
 export function collector<T extends Shape>(obj: T, property: string, element_maker: (...args: any) => any) {
     function add_element(...args: any) {
         if (obj.finalized) {
@@ -75,6 +78,10 @@ export function _default_rotate<T extends { transform: any }>(degrees: number):
     ])
 }
 
+export function _default_scale<T extends { transform: any }>(scale: number):
+    ReturnType<T["transform"]>
+export function _default_scale<T extends { transform: any }>(x_scale: number, y_scale: number):
+    ReturnType<T["transform"]>
 export function _default_scale<T extends { transform: any }>(x_scale: number, ...y_scale: number[]):
     ReturnType<T["transform"]> {
     if (y_scale.length == 0) {
@@ -89,6 +96,10 @@ export function _default_scale<T extends { transform: any }>(x_scale: number, ..
     ])
 }
 
+export function _default_move<T extends { transform: any }>(dx: number, dy: number):
+    ReturnType<T["transform"]>
+export function _default_move<T extends { transform: any }>(delta: Vec):
+    ReturnType<T["transform"]>
 export function _default_move<T extends { transform: any }>(dx: number | Vec, ...dy: number[]):
     ReturnType<T["transform"]> {
     if (dx instanceof Vec) {
@@ -132,11 +143,45 @@ export function _default_clip(clipper: Shape & Movable): Clipped {
 
 export interface Movable {
     transform(matrix: number[]): Shape & Movable
+
+    /**
+     * With one argument, scale by this amount. With two arguments, the first
+     * specifies the scaling along the x axis and the second along the y axis.
+     * Returns a new shape.
+     */
     scale(x_scale: number, y_scale?: number): Shape & Movable
+
+    /**
+     * Translate the the shape by `dx` along the x axis and `dy` along the y
+     * axis. If only one argument is given, it should be a {@link Vec} instance
+     * and its x and y coordinates determine the translation.
+     * Returns a new shape.
+     */
     move(dx: number | Vec, dy?: number): Shape & Movable
+
+    /**
+     * Perform a translation that sends the point `what` to `where` (that is,
+     * translate by `where - what`).
+     */
     move_to(what: Vec, where: Vec): Shape & Movable
+
+    /**
+     * Perform a combination of scaling, rotation and translation
+     * that sends the point `what1` to `where1` and
+     * the point `what2` to `where2`. Returns a new shape.
+     */
     transform_2to2(what1: Vec, what2: Vec, where1: Vec, where2: Vec): Shape & Movable
+
+    /**
+     * Rotate around the origin by the given amount. Returns a new shape.
+     */
     rotate(degrees: number): Shape & Movable
+
+    /**
+     * Clip this shape by another shape. The result is the portion of this
+     * shape that is contained inside the other shape. The fill of the result
+     * is the fill of this shape.
+     */
     clip(clipper: Shape): Shape & Movable
 }
 
@@ -151,9 +196,13 @@ export interface Inflatable {
 }
 
 export class Shape {
+    /** @ignore */
     properties: Map<string, any>
+
+    /** @ignore */
     finalized: boolean
 
+    /** @ignore */
     constructor(properties?: any) {
         if (properties instanceof Map) {
             this.properties = new Map(properties)
@@ -164,6 +213,7 @@ export class Shape {
         }
     }
 
+    /** @ignore */
     ensure_defined() {
         if (!this.finalized) {
             this.compute_properties()
@@ -171,24 +221,33 @@ export class Shape {
         this.finalized = true
     }
 
+    /** @ignore */
     is_axis_aligned_box(): boolean {
         return false
     }
 
+    /** @ignore */
     compute_properties() { }
 
+    /**
+     * Fill this shape. Returns a new shape.
+     *
+     * @param fill - The fill to use (see {@link rgb})
+     */
     fill(fill): this {
         let result = this.copy()
         result.properties.set("fill", fill)
         return result
     }
 
+    /** @ignore */
     geometry(): this {
         let result = this.copy()
         result.properties.delete("fill")
         return result
     }
 
+    /** Return a copy of this shape. */
     copy(): this {
         throw new Error(`copy() not implemented for ${this.constructor.name}`)
     }
@@ -252,10 +311,10 @@ export class RectBorder extends Shape implements Movable {
             delta_y = dy[0]
         }
         const result = RectBorder.from_core_properties(
-            this.left() + delta_x,
-            this.top() + delta_y,
-            this.right() + delta_x,
-            this.bottom() + delta_y,
+            this.rect_left + delta_x,
+            this.rect_top + delta_y,
+            this.rect_right + delta_x,
+            this.rect_bottom + delta_y,
             this.thickness)
         if (this.properties.has("fill")) {
             result.properties.set("fill", this.properties.get("fill"))
@@ -275,6 +334,10 @@ export class RectBorder extends Shape implements Movable {
     copy() {
         this.ensure_defined()
         let result = new RectBorder(this.properties)
+        result.rect_left = this.rect_left
+        result.rect_top = this.rect_top
+        result.rect_right = this.rect_right
+        result.rect_bottom = this.rect_bottom
         result.thickness = this.thickness
         return <any>result
     }
@@ -493,7 +556,7 @@ export class Rect extends Shape implements Movable, Inflatable {
         return result
     }
 
-    open = _default_open
+    open = _default_open<Rect>
 
     miter(amount: number) {
         this.ensure_defined()
@@ -578,6 +641,7 @@ export function disk() {
     return new Disk()
 }
 
+/** @ignore */
 export class DiskBorder extends Shape implements Movable, Inflatable {
     bbox = getter(this, "bbox")
     center = getter(this, "center")
@@ -626,7 +690,7 @@ export class DiskBorder extends Shape implements Movable, Inflatable {
         return result
     }
 
-    open = _default_open
+    open = _default_open<DiskBorder>
 
     transform = _default_transform<DiskBorder>
     scale = _default_scale<DiskBorder>
@@ -643,6 +707,16 @@ class PointList extends Array {
 }
 
 export class Polygon extends Shape implements Movable {
+    /** Set or get the list of points of the polygon.
+     *
+     * ```ts
+     * // Create a traingle from a list of three points
+     * const triangle = polygon().points([vec(0,0), vec(0.5,0), vec(0,0.5)])
+     *
+     * // or pass the points as separate arguments
+     * const triangle = polygon().points(vec(0,0), vec(0.5,0), vec(0,0.5))
+     * ```
+     */
     points = setter(this, "points", (...args) => {
         if (args.length == 1 && args instanceof Array) {
             return PointList.from(args[0])
@@ -650,7 +724,21 @@ export class Polygon extends Shape implements Movable {
             return PointList.from(args)
         }
     })
+
+    /** Add a point to the polygon.
+     *
+     * This is especially useful when the polygon is created using a loop.
+     *
+     * ```ts
+     * const hexagon = polygon()
+     * for (const i of range(6)) {
+     *     hexagon.point(polar(0.5, i * 60))
+     * }
+     * ```
+     */
     point = collector(this, "points", vec)
+
+    /** Get the bounding box of the polygon. */
     bbox = getter(this, "bbox")
 
     transform(matrix: number[]) {
@@ -812,20 +900,25 @@ export class LinearTransform<C extends Shape> extends Shape implements Movable {
         }
     }
 
+    is_scale_and_translate() {
+        return (this.matrix[1] == 0 && this.matrix[3] == 0)
+    }
+
     compute_properties() {
         this.child.ensure_defined()
-        if (this.child.is_axis_aligned_box() && "bbox" in this.child && typeof this.child.bbox == "function") {
-            // These are rect-shaped
+        if ("bbox" in this.child && typeof this.child.bbox == "function") {
             const child_bbox = this.child.bbox()
-            let transformed_points = []
-            for (const corner_x of [child_bbox.left, child_bbox.right]) {
-                for (const corner_y of [child_bbox.top, child_bbox.bottom]) {
-                    const transformed_x = this.matrix[0] * corner_x + this.matrix[1] * corner_y + this.matrix[2]
-                    const transformed_y = this.matrix[3] * corner_x + this.matrix[4] * corner_y + this.matrix[5]
-                    transformed_points.push(vec(transformed_x, transformed_y))
+            if (this.child.is_axis_aligned_box() || this.is_scale_and_translate()) {
+                let transformed_points = []
+                for (const corner_x of [child_bbox.left, child_bbox.right]) {
+                    for (const corner_y of [child_bbox.top, child_bbox.bottom]) {
+                        const transformed_x = this.matrix[0] * corner_x + this.matrix[1] * corner_y + this.matrix[2]
+                        const transformed_y = this.matrix[3] * corner_x + this.matrix[4] * corner_y + this.matrix[5]
+                        transformed_points.push(vec(transformed_x, transformed_y))
+                    }
                 }
+                this.properties.set("bbox", points_bbox(transformed_points))
             }
-            this.properties.set("bbox", points_bbox(transformed_points))
         }
     }
 

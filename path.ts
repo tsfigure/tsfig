@@ -1,6 +1,7 @@
 import { _default_clip, _default_move, _default_move_to, _default_rotate, _default_scale, _default_transform, _default_transform_2to2, getter, Movable, Shape } from "./shapes.ts";
 import { angle, assert, Box, boxes_bbox, normalize_angle, points_bbox, vec, Vec } from "./util.ts";
 
+/** @ignore */
 export class PathLineCommand {
     delta: Vec
 
@@ -13,6 +14,7 @@ export class PathLineCommand {
     }
 }
 
+/** @ignore */
 export class PathArcCommand {
     delta: Vec
     radius: number
@@ -74,6 +76,7 @@ export class PathArcCommand {
     }
 }
 
+/** @ignore */
 export class PathBezierCommand {
     // Distances from the first point to all control points
     deltas: Vec[]
@@ -95,6 +98,7 @@ function path_bbox(start_pos: Vec, commands) {
     return boxes_bbox(command_boxes)
 }
 
+/** @ignore */
 export class MiteredPath extends Shape implements Movable {
     commands: any[]
     start_pos: Vec
@@ -126,6 +130,7 @@ export class MiteredPath extends Shape implements Movable {
     clip = _default_clip
 }
 
+/** @ignore */
 export class InflatedPath extends Shape implements Movable {
     bbox = getter(this, "bbox")
     commands: any[]
@@ -161,7 +166,13 @@ export class InflatedPath extends Shape implements Movable {
     }
 
     move(dx: number | Vec, dy?: number): Shape & Movable {
-        const result = InflatedPath.from_core_properties(this.start_pos.add(dx, dy), this.commands, this.amount)
+        let start_pos: Vec
+        if (typeof dx === "number") {
+            start_pos = this.start_pos.add(dx, dy)
+        } else {
+            start_pos = this.start_pos.add(dx)
+        }
+        const result = InflatedPath.from_core_properties(start_pos, this.commands, this.amount)
         if (this.properties.has("fill")) {
             result.properties.set("fill", this.properties.get("fill"))
         }

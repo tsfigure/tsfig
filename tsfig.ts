@@ -44,6 +44,9 @@ async function process_path(path: string, args) {
     let module
     try {
         module = await import(path + `?t=${Date.now()}`)
+        if (!Object.hasOwn(module, "figure")) {
+            throw new Error(`File ${path} does not export an object named 'figure'`)
+        }
     } catch (e) {
         console.log(e)
         return

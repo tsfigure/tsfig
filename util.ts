@@ -14,6 +14,7 @@ export function normalize_angle(angle: number) {
     return result
 }
 
+/** A 2-d vector. */
 export class Vec {
     x: number
     y: number
@@ -32,7 +33,9 @@ export class Vec {
         this.y = y
     }
 
-    add(other: number | Vec, y?: number) {
+    add(other: Vec): Vec
+    add(x: number, y: number): Vec
+    add(other: number | Vec, y?: number): Vec {
         if (other instanceof Vec) {
             return new Vec(this.x + other.x, this.y + other.y)
         }
@@ -60,6 +63,7 @@ export class Vec {
         return new Vec(-this.x, -this.y)
     }
 
+    /** Compute the dot product with another vector: `this.x * other.x + this.y * other.y` */
     dot(other: Vec) {
         return this.x * other.x + this.y * other.y
     }
@@ -72,7 +76,11 @@ export class Vec {
         return this.mul(1 / this.norm())
     }
 
-    direction() {
+    /** Compute the direction of this vector, in degrees. The direction is counted clockwise
+     * from the positive x axis: The vector (1,0) has a direction of 0 degrees and (1,1) has
+     * a direction of 45 degrees.
+     */
+    direction(): number {
         return Math.atan2(this.y, this.x) / Math.PI * 180
     }
 
@@ -93,6 +101,14 @@ export function angle(from: Vec, to: Vec) {
     }
 }
 
+/** Create a {@link Vec} from coordinates. */
+export function vec(x: number, y: number)
+/** Copy a {@link Vec}. */
+export function vec(v: Vec)
+// The following is needed for Paramters<vec> to return (x: number | Vec, y?: number).
+// Without it it returns (v: Vec), which breaks autocompletion for
+// `setter(this, "some field", vec)`
+export function vec(x: number | Vec, y?: number)
 export function vec(x: number | Vec, y?: number) {
     if (arguments.length == 1) {
         return new Vec(x)
@@ -100,14 +116,28 @@ export function vec(x: number | Vec, y?: number) {
     return new Vec(x, y)
 }
 
+/**
+ * Create a {@link Vec} from polar coordinates.
+ *
+ * @param r - Distance from the center.
+ * @param angle - Direction from the center, in degrees.
+*/
 export function polar(r: number, angle: number) {
     return vec(r, 0).rotate(angle)
 }
 
+/** An axis-aligned box. */
 export class Box {
+    /** The x coordinate of the left edge. */
     left: number
+
+    /** The y coordinate of the top edge. */
     top: number
+
+    /** The x coordinate of the right edge. */
     right: number
+
+    /** The y coordinate of the bottom edge. */
     bottom: number
     center: Vec
     left_center: Vec
@@ -139,6 +169,7 @@ export class Box {
         this.center = new Vec((left + right) / 2, (top + bottom) / 2)
     }
 
+    /** Return a new {@link Box} translated by the given amount. */
     move(delta: Vec) {
         return new Box(this.left + delta.x, this.top + delta.y, this.right + delta.x, this.bottom + delta.y)
     }
